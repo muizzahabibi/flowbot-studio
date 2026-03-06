@@ -1,4 +1,4 @@
-import type { FlowClientConfig, TelemetryMode } from '@google-flow-suite/core';
+import type { FlowClientConfig, TelemetryMode } from '@flowbot-studio/core';
 
 export type ParsedOptions = Record<string, string | boolean | string[]>;
 

@@ -1,4 +1,4 @@
-# Dokumentasi Google Flow Suite
+# Dokumentasi FlowBot Studio
 
 Dokumentasi ini dibagi per topik agar onboarding, penggunaan, dan maintenance lebih cepat.
 

@@ -3,7 +3,7 @@
 ## Import dan Inisialisasi
 
 ```ts
-import { createFlowClient } from "@google-flow-suite/core";
+import { createFlowClient } from "@flowbot-studio/core";
 
 const client = createFlowClient({
   cookie: process.env.FLOW_COOKIE,

@@ -1,5 +1,5 @@
 {
-  "name": "@google-flow-suite/core",
+  "name": "@flowbot-studio/core",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",

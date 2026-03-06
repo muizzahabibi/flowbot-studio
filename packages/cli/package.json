@@ -1,5 +1,5 @@
 {
-  "name": "@google-flow-suite/cli",
+  "name": "@flowbot-studio/cli",
   "version": "0.1.0",
   "type": "module",
   "bin": {
@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@google-flow-suite/core": "workspace:*",
+    "@flowbot-studio/core": "workspace:*",
     "dotenv-safe": "^9.1.0"
   }
 }

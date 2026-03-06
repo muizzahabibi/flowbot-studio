@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { createFlowClient } from '@google-flow-suite/core';
+import { createFlowClient } from '@flowbot-studio/core';
 import { requireApiKey } from '../middleware/auth.js';
 
 interface OpenAIRoutesOptions {

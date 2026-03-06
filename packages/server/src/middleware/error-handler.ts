@@ -1,4 +1,4 @@
-import { FlowError } from '@google-flow-suite/core';
+import { FlowError } from '@flowbot-studio/core';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 export function registerErrorHandler(app: {

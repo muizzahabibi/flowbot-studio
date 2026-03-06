@@ -2,9 +2,9 @@
 
 ## High-Level Design
 - The system is organized as a layered monorepo:
-  - `@google-flow-suite/core`: domain SDK and HTTP integration layer.
-  - `@google-flow-suite/cli`: command handlers that orchestrate SDK calls.
-  - `@google-flow-suite/server`: Fastify API facade exposing OpenAI-compatible and native routes.
+  - `@flowbot-studio/core`: domain SDK and HTTP integration layer.
+  - `@flowbot-studio/cli`: command handlers that orchestrate SDK calls.
+  - `@flowbot-studio/server`: Fastify API facade exposing OpenAI-compatible and native routes.
 
 ## Layering
 - Domain layer (`core/domain`) holds intent-level actions:

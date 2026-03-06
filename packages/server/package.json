@@ -1,5 +1,5 @@
 {
-  "name": "@google-flow-suite/server",
+  "name": "@flowbot-studio/server",
   "version": "0.1.0",
   "type": "module",
   "main": "dist/main.js",
@@ -12,7 +12,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
-    "@google-flow-suite/core": "workspace:*",
+    "@flowbot-studio/core": "workspace:*",
     "dotenv-safe": "^9.1.0",
     "fastify": "^5.2.1"
   }

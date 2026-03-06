@@ -3,8 +3,8 @@
 ## Menjalankan Server
 
 ```bash
-pnpm --filter @google-flow-suite/server build
-pnpm --filter @google-flow-suite/server start
+pnpm --filter @flowbot-studio/server build
+pnpm --filter @flowbot-studio/server start
 ```
 
 Default URL: `http://127.0.0.1:3000`

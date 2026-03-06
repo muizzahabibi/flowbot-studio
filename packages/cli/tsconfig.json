@@ -4,7 +4,7 @@
     "outDir": "dist",
     "baseUrl": ".",
     "paths": {
-      "@google-flow-suite/core": ["../core/src/index.ts"]
+      "@flowbot-studio/core": ["../core/src/index.ts"]
     }
   },
   "include": ["src", "test", "../core/src"]

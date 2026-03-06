@@ -28,7 +28,7 @@
 - Runtime dependencies:
   - `fastify` in `packages/server/package.json`.
   - `dotenv-safe` in all runtime packages.
-  - local workspace dependency `@google-flow-suite/core` used by CLI and server.
+  - local workspace dependency `@flowbot-studio/core` used by CLI and server.
 - Dev dependencies:
   - `typescript`, `tsup`, `vitest`, `eslint`, `@typescript-eslint/*`, `prettier` in root `package.json`.
 

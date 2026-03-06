@@ -35,8 +35,8 @@ Solusi:
 - Build ulang:
 
 ```bash
-pnpm --filter @google-flow-suite/server build
-pnpm --filter @google-flow-suite/server start
+pnpm --filter @flowbot-studio/server build
+pnpm --filter @flowbot-studio/server start
 ```
 
 ## reCAPTCHA sering gagal saat bulk

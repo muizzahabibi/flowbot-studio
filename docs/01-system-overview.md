@@ -2,10 +2,10 @@
 
 ## Tujuan Sistem
 
-Google Flow Suite adalah monorepo TypeScript untuk mengakses Google Flow lewat:
-- SDK reusable (`@google-flow-suite/core`)
-- CLI operasional (`@google-flow-suite/cli`)
-- HTTP API server (`@google-flow-suite/server`)
+FlowBot Studio adalah monorepo TypeScript untuk mengakses Google Flow lewat:
+- SDK reusable (`@flowbot-studio/core`)
+- CLI operasional (`@flowbot-studio/cli`)
+- HTTP API server (`@flowbot-studio/server`)
 
 ## Komponen Utama
 

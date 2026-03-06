@@ -1,16 +1,26 @@
-# Google Flow Suite
+# FlowBot Studio
 
-Monorepo TypeScript untuk akses Google Flow dengan 3 layer utama:
+[![Node.js](https://img.shields.io/badge/node-22%2B-339933.svg)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-9%2B-F69220.svg)](https://pnpm.io/)
+[![TypeScript](https://img.shields.io/badge/typescript-5.x-3178C6.svg)](https://www.typescriptlang.org/)
 
-- **Core SDK** (`@google-flow-suite/core`)
-- **CLI** (`@google-flow-suite/cli`)
-- **HTTP API Server** (`@google-flow-suite/server`, OpenAI-compatible + native Flow route)
+Monorepo TypeScript untuk akses workflow image generation berbasis endpoint Google Flow, terdiri dari:
+- **Core SDK** (`@flowbot-studio/core`)
+- **CLI** (`@flowbot-studio/cli`)
+- **HTTP API Server** (`@flowbot-studio/server`, OpenAI-compatible + native route)
 
-Project ini dibangun berdasarkan pola request endpoint Google Flow yang ter-capture, termasuk autentikasi session, upload media, generate image, workflow patch, dan media redirect.
+## Disclaimer Penting
+
+> [!WARNING]
+> Proyek ini dibuat **murni untuk edukasi, riset, dan eksperimen pribadi**.
+> 
+> Proyek ini **tidak berafiliasi, tidak disponsori, dan tidak didukung** oleh Google, Gemini, maupun entitas resmi terkait lainnya.
+> 
+> Penggunaan reverse-engineered/web endpoint mungkin melanggar ToS layanan pihak ketiga. Semua risiko penggunaan ditanggung pengguna.
 
 ## Fitur
 
-- SDK untuk workflow Flow (project, media, prompt, auth session)
+- SDK modular untuk operasi project/media/prompt/auth.
 - CLI `flow` untuk operasi harian:
   - create project
   - generate image
@@ -26,53 +36,56 @@ Project ini dibangun berdasarkan pola request endpoint Google Flow yang ter-capt
   - `POST /v1/images/image-edit`
   - `POST /flow/projects/:projectId/generate`
   - `PATCH /flow/workflows/:workflowId`
-- Retry + timeout per kelas endpoint
-- Redaction logging untuk header sensitif
+- Retry + timeout per kelas endpoint.
+- Redaction logging untuk header/token sensitif.
 
 ## Dokumentasi
 
-- Halaman docs: [docs/README.md](./docs/README.md)
+- Docs index: [docs/README.md](./docs/README.md)
 - System overview: [docs/01-system-overview.md](./docs/01-system-overview.md)
 - Architecture: [docs/02-architecture.md](./docs/02-architecture.md)
 - Core SDK guide: [docs/03-core-sdk.md](./docs/03-core-sdk.md)
 - CLI tutorial: [docs/04-cli-tutorial.md](./docs/04-cli-tutorial.md)
 - API server tutorial: [docs/05-api-server-tutorial.md](./docs/05-api-server-tutorial.md)
-- Auth & environment: [docs/06-auth-and-env.md](./docs/06-auth-and-env.md)
-- Bulk generation playbook: [docs/07-bulk-generation.md](./docs/07-bulk-generation.md)
+- Auth & env: [docs/06-auth-and-env.md](./docs/06-auth-and-env.md)
+- Bulk generation: [docs/07-bulk-generation.md](./docs/07-bulk-generation.md)
 - Troubleshooting: [docs/08-troubleshooting.md](./docs/08-troubleshooting.md)
-- Security best practices: [docs/09-security-best-practices.md](./docs/09-security-best-practices.md)
-- Development workflow: [docs/10-development-workflow.md](./docs/10-development-workflow.md)
+- Security: [docs/09-security-best-practices.md](./docs/09-security-best-practices.md)
+- Dev workflow: [docs/10-development-workflow.md](./docs/10-development-workflow.md)
 
 ## Struktur Repo
 
 ```text
-google-flow-suite/
+flowbot-studio/
 ├─ packages/
 │  ├─ core/      # SDK domain + HTTP client + adapters
 │  ├─ cli/       # Command-line interface
 │  └─ server/    # Fastify API server
+├─ docs/
+├─ scripts/
 ├─ .env.example
 ├─ pnpm-workspace.yaml
 └─ package.json
 ```
 
-## Prasyarat
+## Quick Start
+
+### Prasyarat
 
 - Node.js 22+
 - pnpm 9+
-- Akun Google Flow yang valid
-- Credential runtime (cookie dan/atau bearer token)
+- Credential runtime valid (cookie dan/atau bearer token)
 
-## Setup Cepat (Windows CMD)
+### Setup
 
 ```cmd
-cd /d "D:\Kerja\Ngoding 2026\gemini-bot\google-flow-suite"
+cd /d "D:\Kerja\Ngoding 2026\gemini-bot\flowbot-studio"
 pnpm install
 copy .env.example .env
 pnpm -r build
 ```
 
-Isi `.env` minimal:
+Isi minimal `.env`:
 
 ```env
 FLOW_COOKIE=<full Cookie header value>
@@ -85,22 +98,7 @@ FLOW_LOCAL_API_KEY=
 PORT=3000
 ```
 
-## Cara Ambil Credential dari Browser
-
-1. Buka `https://labs.google/fx/tools/flow` dan pastikan login.
-2. Buka DevTools (`F12`) → tab **Network**.
-3. Pilih request ke:
-   - `https://labs.google/fx/api/auth/session`
-4. Ambil:
-   - **Cookie header penuh** (`Request Headers -> cookie`)
-   - **access_token** dari response JSON
-5. Set ke `.env`:
-   - `FLOW_COOKIE=<cookie penuh>`
-   - `FLOW_BEARER_TOKEN=<access_token>`
-
-## Perintah Dasar Monorepo
-
-Dari root repo:
+## Monorepo Commands
 
 ```cmd
 pnpm -r build
@@ -109,218 +107,94 @@ pnpm -r typecheck
 pnpm -r test
 ```
 
-## CLI
+## CLI Usage
 
-Entry point CLI dibuild ke:
-
+Entry point:
 - `packages/cli/dist/index.js`
 
-Format umum:
+Format:
 
 ```cmd
 pnpm exec node packages/cli/dist/index.js <command> [options]
 ```
 
-### 1) Create project
+Contoh:
 
 ```cmd
 pnpm exec node packages/cli/dist/index.js project create --name "my-project"
-```
-
-### 2) Generate image
-
-```cmd
-pnpm exec node packages/cli/dist/index.js generate --project-id "<PROJECT_ID>" --prompt "cinematic cat astronaut"
-```
-
-Catatan:
-- CLI akan auto-generate reCAPTCHA token jika `--recaptcha-token` tidak diberikan.
-- Jika reCAPTCHA ditolak upstream, CLI retry 1x dengan token baru.
-
-### 3) Upload reference image
-
-```cmd
+pnpm exec node packages/cli/dist/index.js generate --project-id "<PROJECT_ID>" --prompt "cinematic pool villa"
 pnpm exec node packages/cli/dist/index.js upload --project-id "<PROJECT_ID>" --image "D:\path\ref.png"
-```
-
-### 4) Caption image
-
-```cmd
-pnpm exec node packages/cli/dist/index.js caption --image "D:\path\image.png" --count 3
-```
-
-### 5) Fetch media
-
-```cmd
-pnpm exec node packages/cli/dist/index.js fetch --media-id "<MEDIA_ID>" --output "./out.png"
-```
-
-### 6) Delete media
-
-```cmd
-pnpm exec node packages/cli/dist/index.js delete --media-id "<MEDIA_ID>"
-```
-
-### 7) Rename workflow
-
-```cmd
+pnpm exec node packages/cli/dist/index.js fetch --media-id "<MEDIA_ID>" --output "./output/result.png"
 pnpm exec node packages/cli/dist/index.js workflow rename --workflow-id "<WORKFLOW_ID>" --project-id "<PROJECT_ID>" --name "new-name"
 ```
 
-### 8) Animate
+Catatan:
+- CLI auto-generate reCAPTCHA token bila `--recaptcha-token` tidak disuplai.
+- Jika upstream menolak reCAPTCHA, CLI retry satu kali dengan token baru.
+
+## API Server Usage
+
+Jalankan server:
 
 ```cmd
-pnpm exec node packages/cli/dist/index.js animate --media-id "<MEDIA_ID>"
+pnpm --filter @flowbot-studio/server build
+pnpm --filter @flowbot-studio/server start
 ```
 
-Catatan: endpoint animate saat ini feature-gated/disabled.
-
-## API Server
-
-### Jalankan server
-
-```cmd
-pnpm --filter @google-flow-suite/server build
-pnpm --filter @google-flow-suite/server start
-```
-
-Server default:
-
+Default URL:
 - `http://127.0.0.1:3000`
 
-### Health check
+Contoh request:
 
 ```cmd
 curl http://127.0.0.1:3000/health
-```
-
-### List models
-
-```cmd
 curl http://127.0.0.1:3000/v1/models
 ```
 
-### Generate image (OpenAI-compatible)
+Generate OpenAI-compatible:
 
 ```cmd
 curl -X POST http://127.0.0.1:3000/v1/images/generations ^
   -H "content-type: application/json" ^
-  -d "{\"model\":\"nano-banana\",\"prompt\":\"api smoke test image\",\"project_id\":\"<PROJECT_ID>\",\"response_format\":\"url\",\"recaptcha_token\":\"<RECAPTCHA_TOKEN>\"}"
+  -d "{\"model\":\"nano-banana\",\"prompt\":\"api pool test\",\"project_id\":\"<PROJECT_ID>\",\"response_format\":\"url\",\"recaptcha_token\":\"<RECAPTCHA_TOKEN>\"}"
 ```
 
-### Native Flow route generate
+## Bulk Generate (Otomatis)
 
-```cmd
-curl -X POST http://127.0.0.1:3000/flow/projects/<PROJECT_ID>/generate ^
-  -H "content-type: application/json" ^
-  -d "{\"prompt\":\"test\",\"recaptcha_token\":\"<RECAPTCHA_TOKEN>\",\"model\":\"NARWHAL\"}"
+Script siap pakai:
+- `scripts/generate-20-kolam-renang.ps1`
+
+Contoh:
+
+```powershell
+powershell -NoExit -ExecutionPolicy Bypass -File .\scripts\generate-20-kolam-renang.ps1 -Count 20 -MinDelaySeconds 5 -MaxDelaySeconds 30 -KeepWindowOpen
 ```
 
-### Rename workflow via API
+## Troubleshooting Cepat
 
-```cmd
-curl -X PATCH http://127.0.0.1:3000/flow/workflows/<WORKFLOW_ID> ^
-  -H "content-type: application/json" ^
-  -d "{\"projectId\":\"<PROJECT_ID>\",\"displayName\":\"new-name\"}"
-```
-
-## Proteksi API Key Lokal (opsional)
-
-Set di `.env`:
-
-```env
-FLOW_LOCAL_API_KEY=my-local-key
-```
-
-Lalu request ke route proteksi wajib pakai:
-
-```http
-Authorization: Bearer my-local-key
-```
-
-## Bulk Generate ke Lokal (copy-paste)
-
-Contoh cepat membuat banyak file dari daftar prompt.
-
-### 1) Buat file prompt
-
-```cmd
-(
-echo kucing astronaut cinematic
-echo kota cyberpunk malam hujan
-echo robot lucu watercolor
-echo rumah kayu di pegunungan berkabut
-echo naga biru fantasy ultra detail
-) > prompts.txt
-```
-
-### 2) Jalankan loop generate + download
-
-```cmd
-powershell -NoProfile -Command "$prompts = Get-Content 'prompts.txt' | Where-Object { $_ -and $_.Trim() }; New-Item -ItemType Directory -Force -Path 'output' | Out-Null; $i = 1; foreach($p in $prompts){ Write-Host ('[GEN] ' + $p); $raw = pnpm exec node packages/cli/dist/index.js generate --project-id $env:PROJECT_ID --prompt $p 2>&1 | Out-String; $m = [regex]::Match($raw, '\"url\"\s*:\s*\"([^\"]+)\"'); if(-not $m.Success){ Write-Host '[ERR] URL tidak ketemu'; Write-Host $raw; continue }; $url = $m.Groups[1].Value; $file = ('output\img-{0:D3}.png' -f $i); Invoke-WebRequest -Uri $url -OutFile $file; Write-Host ('[OK] ' + $file); $i++ }"
-```
-
-### 3) Cek hasil
-
-```cmd
-dir output
-```
-
-## Troubleshooting
-
-### Server start lalu langsung exit
-
-Pastikan sudah build terbaru:
-
-```cmd
-pnpm --filter @google-flow-suite/server build
-pnpm --filter @google-flow-suite/server start
-```
-
-### `Either cookie or bearer token must be provided`
-
-Isi `FLOW_COOKIE` atau `FLOW_BEARER_TOKEN` di `.env`.
-
-### `Invalid auth session payload` / `401` di endpoint TRPC
-
-- Ambil ulang cookie penuh dari request browser yang masih valid.
-- Ambil ulang `access_token` dari `/fx/api/auth/session`.
-- Update `.env`, lalu jalankan ulang command.
-
-### Generate sukses tapi gambar 0
-
-Gunakan build terbaru (`pnpm -r build`) karena parser response sudah men-support struktur response `media[]` terbaru.
-
-### Fetch media gagal redirect
-
-Jika `fetch --media-id` tidak menemukan redirect URL, gunakan URL signed yang keluar dari hasil generate lalu download langsung:
-
-```cmd
-curl -L "<SIGNED_URL>" -o "result.png"
-```
-
-## Batasan Saat Ini
-
-- `media.refine()` masih placeholder (belum call endpoint refine upstream).
-- `animate` masih disabled (feature-gated).
-- Endpoint status `/flow/jobs/:jobId/status` bersifat placeholder.
+- `Either cookie or bearer token must be provided`:
+  - isi `FLOW_COOKIE` atau `FLOW_BEARER_TOKEN`.
+- `Invalid auth session payload` / `401`:
+  - refresh cookie + access token dari browser.
+- Generate sukses tapi media tidak ke-download:
+  - gunakan fallback `url`/`b64_json`, atau retry fetch `media_id`.
 
 ## Keamanan
 
-- Jangan commit `.env` ke repository.
-- Jangan share cookie atau bearer token di issue publik.
-- Rotate credential jika pernah terpapar.
-- Gunakan project ini hanya pada akun/akses yang Anda miliki izin.
+- Jangan commit `.env` dan credential aktif.
+- Jangan publish request dump mentah yang berisi cookie/token.
+- Rotate credential jika pernah terekspos.
+- Gunakan hanya akun/akses yang kamu miliki izin.
 
-## Catatan Endpoint yang Dipakai
+## Batasan Saat Ini
 
-Implementasi utama memakai endpoint keluarga berikut:
+- `media.refine()` masih placeholder.
+- `animate` masih feature-gated/disabled.
+- `/flow/jobs/:jobId/status` bersifat placeholder.
 
-- `POST /v1/flow/uploadImage`
-- `POST /v1/projects/{projectId}/flowMedia:batchGenerateImages`
-- `PATCH /v1/flowWorkflows/{workflowId}`
-- `GET /fx/api/trpc/media.getMediaUrlRedirect`
-- `POST /fx/api/trpc/project.createProject`
-- `GET /fx/api/auth/session`
+## Disclaimer (Legal)
 
-Serta support telemetry endpoint sesuai konfigurasi core.
+Proyek ini adalah proyek independen komunitas untuk tujuan pembelajaran.  
+Tidak ada hubungan resmi dengan Google, Gemini, OpenAI, atau afiliasi korporat terkait.  
+Pengguna bertanggung jawab penuh untuk kepatuhan hukum, kebijakan platform, dan risiko operasionalnya sendiri.
+

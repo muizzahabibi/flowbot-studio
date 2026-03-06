@@ -1,4 +1,4 @@
-import { createFlowClient } from '@google-flow-suite/core';
+import { createFlowClient } from '@flowbot-studio/core';
 import type { ParsedArgs } from '../utils/args.js';
 import { buildClientConfig, requireStringOption } from '../utils/args.js';
 

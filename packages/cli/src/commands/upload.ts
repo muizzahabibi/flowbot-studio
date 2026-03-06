@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { createFlowClient } from '@google-flow-suite/core';
+import { createFlowClient } from '@flowbot-studio/core';
 import type { ParsedArgs } from '../utils/args.js';
 import { buildClientConfig, getStringOption, requireStringOption } from '../utils/args.js';
 import { guessMimeType, printInfo, printJson } from '../utils/output.js';
