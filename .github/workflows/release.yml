@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile=false
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Pack SDK
+        run: pnpm --filter @google-flow-suite/core pack
+
+      - name: Pack CLI
+        run: pnpm --filter @google-flow-suite/cli pack
+
+      - name: Build server image
+        run: |
+          cat > Dockerfile <<'EOF'
+          FROM node:22-alpine
+          WORKDIR /app
+          COPY . .
+          RUN corepack enable && pnpm install --frozen-lockfile=false && pnpm --filter @google-flow-suite/server build
+          CMD ["node", "packages/server/dist/main.js"]
+          EOF
+          docker build -t google-flow-suite-server:latest .

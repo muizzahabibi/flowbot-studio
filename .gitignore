@@ -1,0 +1,10 @@
+node_modules
+pnpm-lock.yaml
+dist
+coverage
+.env
+*.log
+output/
+*.har
+.tmp-flow-open.png
+smoke-test.png
