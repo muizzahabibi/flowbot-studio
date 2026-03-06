@@ -29,6 +29,20 @@ Project ini dibangun berdasarkan pola request endpoint Google Flow yang ter-capt
 - Retry + timeout per kelas endpoint
 - Redaction logging untuk header sensitif
 
+## Dokumentasi
+
+- Halaman docs: [docs/README.md](./docs/README.md)
+- System overview: [docs/01-system-overview.md](./docs/01-system-overview.md)
+- Architecture: [docs/02-architecture.md](./docs/02-architecture.md)
+- Core SDK guide: [docs/03-core-sdk.md](./docs/03-core-sdk.md)
+- CLI tutorial: [docs/04-cli-tutorial.md](./docs/04-cli-tutorial.md)
+- API server tutorial: [docs/05-api-server-tutorial.md](./docs/05-api-server-tutorial.md)
+- Auth & environment: [docs/06-auth-and-env.md](./docs/06-auth-and-env.md)
+- Bulk generation playbook: [docs/07-bulk-generation.md](./docs/07-bulk-generation.md)
+- Troubleshooting: [docs/08-troubleshooting.md](./docs/08-troubleshooting.md)
+- Security best practices: [docs/09-security-best-practices.md](./docs/09-security-best-practices.md)
+- Development workflow: [docs/10-development-workflow.md](./docs/10-development-workflow.md)
+
 ## Struktur Repo
 
 ```text
