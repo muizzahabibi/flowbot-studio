@@ -45,17 +45,17 @@ export class FlowHttpClient {
   }
 
   async post<T>(url: string, body: unknown, init?: RequestInitEx, options?: FlowRequestOptions): Promise<T> {
-    const mergedHeaders = {
-      ...(init?.headers ?? {}),
-      'content-type': 'text/plain;charset=UTF-8',
-    };
+    const headersObj = new Headers(init?.headers ?? {});
+    if (!headersObj.has('content-type')) {
+      headersObj.set('content-type', 'text/plain;charset=UTF-8');
+    }
 
     return this.request<T>(
       url,
       {
         ...(init ?? {}),
         method: 'POST',
-        headers: mergedHeaders,
+        headers: headersObj,
         body: typeof body === 'string' ? body : JSON.stringify(body),
       },
       options,
@@ -63,17 +63,17 @@ export class FlowHttpClient {
   }
 
   async patch<T>(url: string, body: unknown, init?: RequestInitEx, options?: FlowRequestOptions): Promise<T> {
-    const mergedHeaders = {
-      ...(init?.headers ?? {}),
-      'content-type': 'text/plain;charset=UTF-8',
-    };
+    const headersObj = new Headers(init?.headers ?? {});
+    if (!headersObj.has('content-type')) {
+      headersObj.set('content-type', 'text/plain;charset=UTF-8');
+    }
 
     return this.request<T>(
       url,
       {
         ...(init ?? {}),
         method: 'PATCH',
-        headers: mergedHeaders,
+        headers: headersObj,
         body: typeof body === 'string' ? body : JSON.stringify(body),
       },
       options,

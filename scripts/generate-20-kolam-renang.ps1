@@ -1,6 +1,7 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
   [string]$ProjectId = $env:PROJECT_ID,
+  [string]$FlowCookie = $env:FLOW_COOKIE,
   [string]$Model = "nano-banana",
   [int]$Count = 20,
   [int]$MinDelaySeconds = 5,
@@ -13,20 +14,83 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+# Hindari native stderr dilempar sebagai terminating error agar output CLI bisa ditangkap utuh.
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+  $PSNativeCommandUseErrorActionPreference = $false
+}
 
 if ($Count -lt 1) { throw "Count minimal 1." }
 if ($MinDelaySeconds -lt 0) { throw "MinDelaySeconds tidak boleh negatif." }
 if ($MaxDelaySeconds -lt $MinDelaySeconds) { throw "MaxDelaySeconds harus >= MinDelaySeconds." }
 if ($FetchRetries -lt 1) { throw "FetchRetries minimal 1." }
 if ($FetchRetryDelaySeconds -lt 1) { throw "FetchRetryDelaySeconds minimal 1." }
-
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
+$pnpmCmd = "pnpm.cmd"
 
+function Get-EnvFileValue {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FilePath,
+    [Parameter(Mandatory = $true)]
+    [string]$Name
+  )
+
+  if (-not (Test-Path $FilePath)) { return $null }
+  $lines = Get-Content -Path $FilePath -ErrorAction SilentlyContinue
+  foreach ($line in $lines) {
+    if ($line -match "^\s*$Name=(.*)$") {
+      return $Matches[1]
+    }
+  }
+  return $null
+}
+
+if (-not $FlowCookie) {
+  $FlowCookie = Get-EnvFileValue -FilePath ".env" -Name "FLOW_COOKIE"
+}
+if (-not $FlowCookie) {
+  throw @"
+FLOW_COOKIE belum diisi.
+Set di environment atau tambahkan ke .env:
+FLOW_COOKIE=<cookie dari browser labs.google>
+"@
+}
+
+$coreDist = "packages/core/dist/index.js"
 $cliEntry = "packages/cli/dist/index.js"
-if (-not (Test-Path $cliEntry)) {
-  Write-Host "[INIT] Build project karena CLI dist belum ada..."
-  & pnpm -r build
+
+function Get-LatestWriteTimeUtc {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$PathPattern
+  )
+
+  $items = Get-ChildItem -Path $PathPattern -Recurse -File -ErrorAction SilentlyContinue
+  if (-not $items -or $items.Count -eq 0) { return [datetime]::MinValue }
+  return ($items | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).LastWriteTimeUtc
+}
+
+$needsBuild = (-not (Test-Path $coreDist)) -or (-not (Test-Path $cliEntry))
+if (-not $needsBuild) {
+  $latestSourceUtc = @(
+    Get-LatestWriteTimeUtc -PathPattern "packages/core/src/*.ts"
+    Get-LatestWriteTimeUtc -PathPattern "packages/cli/src/*.ts"
+  ) | Sort-Object -Descending | Select-Object -First 1
+
+  $latestDistUtc = @(
+    (Get-Item $coreDist).LastWriteTimeUtc
+    (Get-Item $cliEntry).LastWriteTimeUtc
+  ) | Sort-Object -Descending | Select-Object -First 1
+
+  if ($latestSourceUtc -gt $latestDistUtc) {
+    $needsBuild = $true
+  }
+}
+
+if ($needsBuild) {
+  Write-Host "[INIT] Build core+cli karena dist belum ada / sudah kedaluwarsa..."
+  & $pnpmCmd --filter @flowbot-studio/core --filter @flowbot-studio/cli build
   if ($LASTEXITCODE -ne 0) { throw "Build gagal. Periksa error di atas." }
 }
 
@@ -36,11 +100,31 @@ function Invoke-FlowCli {
     [string[]]$Args
   )
 
-  $raw = & pnpm exec node $cliEntry @Args 2>&1 | Out-String
-  if ($LASTEXITCODE -ne 0) {
+  # Force refresh auth token from FLOW_COOKIE and avoid stale FLOW_BEARER_TOKEN from .env.
+  $allArgs = @("exec", "node", $cliEntry) + $Args + @("--cookie", $FlowCookie, "--bearer-token=")
+  $escapedArgs = $allArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }
+
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = $pnpmCmd
+  $psi.Arguments = ($escapedArgs -join " ")
+  $psi.WorkingDirectory = (Get-Location).Path
+  $psi.UseShellExecute = $false
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  $psi.CreateNoWindow = $true
+
+  $proc = New-Object System.Diagnostics.Process
+  $proc.StartInfo = $psi
+  $null = $proc.Start()
+  $stdout = $proc.StandardOutput.ReadToEnd()
+  $stderr = $proc.StandardError.ReadToEnd()
+  $proc.WaitForExit()
+
+  $raw = @($stdout, $stderr) -join [Environment]::NewLine
+  if ($proc.ExitCode -ne 0) {
     throw "Command gagal: flow $($Args -join ' ')`n$raw"
   }
-  return $raw
+  return $raw.Trim()
 }
 
 function ConvertFrom-CliJson {
@@ -77,6 +161,33 @@ function Get-PropValue {
   $p = $InputObject.PSObject.Properties[$Name]
   if ($null -eq $p) { return $null }
   return $p.Value
+}
+
+function Test-FlowSession {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Cookie
+  )
+
+  try {
+    $resp = Invoke-WebRequest -Uri "https://labs.google/fx/api/auth/session" -Headers @{ cookie = $Cookie } -Method GET -TimeoutSec 30
+    return ($resp.StatusCode -eq 200)
+  } catch {
+    return $false
+  }
+}
+
+if (-not (Test-FlowSession -Cookie $FlowCookie)) {
+  throw @"
+FLOW_COOKIE tidak valid/expired (session endpoint tidak bisa diakses dengan cookie ini).
+Cara refresh:
+1) Login ulang ke https://labs.google/fx/tools/flow di browser.
+2) Buka DevTools -> Network, lakukan aksi create project.
+3) Ambil header request 'cookie' dari request ke labs.google/fx/api/trpc/project.createProject (atau /fx/api/auth/session).
+4) Update FLOW_COOKIE di .env, lalu jalankan ulang script.
+
+Catatan: file HAR ini tersanitasi (tidak menyimpan cookie), jadi cookie tidak bisa dipulihkan dari labs.google.har.
+"@
 }
 
 if (-not $ProjectId) {
@@ -206,3 +317,4 @@ if ($KeepWindowOpen) {
   Write-Host ""
   Read-Host "Tekan Enter untuk menutup"
 }
+
