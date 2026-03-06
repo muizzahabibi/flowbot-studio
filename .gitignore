@@ -8,3 +8,5 @@ output/
 *.har
 .tmp-flow-open.png
 smoke-test.png
+curl_request_flow.txt
+url_request_flow.txt
