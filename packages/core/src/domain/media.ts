@@ -50,7 +50,8 @@ export class Media {
     return result.candidates.map((candidate) => candidate.output);
   }
 
-  async animate(_mediaId: string): Promise<void> {
+  async animate(mediaId: string): Promise<void> {
+    if (!mediaId.trim()) throw new FlowValidationError('mediaId is required');
     throw new FlowValidationError('animate endpoint is feature-gated and currently disabled');
   }
 
