@@ -49,10 +49,11 @@ export class FlowAuthSession {
     }
 
     if (!this.cookie) {
-      if (this.state.accessToken) {
-        return this.state.accessToken;
-      }
-      throw new FlowAuthError('Cookie is required to refresh auth session');
+      throw new FlowAuthError('Cookie is required to refresh auth session', {
+        code: 'FLOW_AUTH_INVALID_COOKIE',
+        source: 'auth_session',
+        retryable: true,
+      });
     }
 
     await this.refreshFromLabs();
@@ -74,13 +75,19 @@ export class FlowAuthSession {
     if (!response.ok) {
       const errorBody = await response.text();
       this.logger.error('Auth session refresh failed', { status: response.status, errorBody });
-      throw new FlowAuthError(`Authentication failed (${response.status})`, errorBody);
+      throw new FlowAuthError(`Authentication failed (${response.status})`, {
+        details: errorBody,
+      });
     }
 
     const payload = (await response.json()) as FlowSessionResponse;
 
     if (payload.error === 'ACCESS_TOKEN_REFRESH_NEEDED') {
-      throw new FlowAuthError('Cookie expired. Please provide a new cookie.');
+      throw new FlowAuthError('Cookie expired. Please provide a new cookie.', {
+        code: 'FLOW_AUTH_REFRESH_NEEDED',
+        source: 'auth_session',
+        retryable: true,
+      });
     }
 
     if (!payload.access_token || !payload.expires) {

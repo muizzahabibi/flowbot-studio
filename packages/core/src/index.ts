@@ -15,6 +15,7 @@ import type { FlowClientConfig } from './types/flow.js';
 
 export * from './types/flow.js';
 export * from './utils/errors.js';
+export type { FlowAuthErrorOptions, FlowErrorCode, FlowErrorOptions, FlowErrorSource } from './utils/errors.js';
 export type { PromptBuilderInput };
 export { Account, Project, Media, Prompt, FlowAuthSession, FlowHttpClient, FlowEndpoints, FlowTelemetry, OpenAIImageAdapter };
 

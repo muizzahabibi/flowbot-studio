@@ -1,9 +1,22 @@
+import { FlowError, createFlowClient } from '@flowbot-studio/core';
 import { config as loadEnv } from 'dotenv-safe';
 import Fastify from 'fastify';
 import { pathToFileURL } from 'node:url';
-import { registerOpenAIRoutes } from './routes/openai.js';
-import { registerFlowRoutes } from './routes/flow.js';
 import { registerErrorHandler } from './middleware/error-handler.js';
+import { registerFlowRoutes } from './routes/flow.js';
+import { registerOpenAIRoutes } from './routes/openai.js';
+import { FlowRecoveryOrchestrator } from './services/flow-recovery-orchestrator.js';
+import { PlaywrightRecoveryService } from './services/playwright-recovery-service.js';
+import { parseRecoveryConfig } from './services/recovery-config.js';
+
+function isRecoverableValidationError(error: unknown): error is FlowError {
+  return (
+    error instanceof FlowError &&
+    (error.code === 'FLOW_AUTH_INVALID_COOKIE' ||
+      error.code === 'FLOW_AUTH_REFRESH_NEEDED' ||
+      error.code === 'FLOW_CAPTCHA_RELOAD_REQUIRED')
+  );
+}
 
 export function createServer() {
   try {
@@ -28,10 +41,37 @@ export function createServer() {
   app.get('/health', async () => ({ status: 'ok' }));
 
   const apiKey = process.env.FLOW_LOCAL_API_KEY;
+  const recoveryConfig = parseRecoveryConfig(process.env);
+  const recoveryService = new PlaywrightRecoveryService({ config: recoveryConfig });
+  const recoveryOrchestrator = new FlowRecoveryOrchestrator({
+    profileKey: recoveryConfig.profileKey,
+    recover: () =>
+      recoveryService.recover({
+        cookieDomain: '.google.com',
+        success: async ({ recoveredCookieHeader }) => {
+          if (!recoveredCookieHeader) {
+            return false;
+          }
+
+          try {
+            await createFlowClient({ cookie: recoveredCookieHeader }).authSession.getAccessToken(true);
+            return true;
+          } catch (error) {
+            if (isRecoverableValidationError(error)) {
+              return false;
+            }
+            throw error;
+          }
+        },
+      }),
+  });
 
   const routeOptions = apiKey ? { apiKey } : {};
   void registerOpenAIRoutes(app, routeOptions);
-  void registerFlowRoutes(app, routeOptions);
+  void registerFlowRoutes(app, {
+    ...routeOptions,
+    recoveryOrchestrator,
+  });
 
   registerErrorHandler(app);
 

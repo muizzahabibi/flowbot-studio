@@ -1,9 +1,33 @@
 import type { FastifyInstance } from 'fastify';
 import { createFlowClient } from '@flowbot-studio/core';
 import { requireApiKey } from '../middleware/auth.js';
+import { FlowRecoveryOrchestrator, type FlowGenerateRetryInput } from '../services/flow-recovery-orchestrator.js';
 
 interface FlowRoutesOptions {
   apiKey?: string | undefined;
+  recoveryOrchestrator?: Pick<FlowRecoveryOrchestrator, 'runGenerateWithRecovery'>;
+}
+
+type GenerateBaseOptions = {
+  seed?: number;
+  model?: 'NARWHAL' | 'IMAGEN_3_5' | 'GEM_PIX' | 'R2I';
+};
+
+function createGenerateBaseOptions(body: {
+  seed?: number;
+  model?: 'NARWHAL' | 'IMAGEN_3_5' | 'GEM_PIX' | 'R2I';
+}): GenerateBaseOptions {
+  const options: GenerateBaseOptions = {};
+
+  if (body.seed !== undefined) {
+    options.seed = body.seed;
+  }
+
+  if (body.model !== undefined) {
+    options.model = body.model;
+  }
+
+  return options;
 }
 
 export async function registerFlowRoutes(
@@ -23,32 +47,38 @@ export async function registerFlowRoutes(
       references?: string[];
     };
 
-    const client = createFlowClient();
-    const project = client.project(projectId);
-
     const references = (body.references ?? []).map((name) => ({
       imageInputType: 'IMAGE_INPUT_TYPE_REFERENCE' as const,
       name,
     }));
 
-    const generateOptions: {
-      recaptchaToken: string;
-      seed?: number;
-      model?: 'NARWHAL' | 'IMAGEN_3_5' | 'GEM_PIX' | 'R2I';
-    } = {
-      recaptchaToken: body.recaptcha_token,
+    const generateBaseOptions = createGenerateBaseOptions(body);
+    const recoveryOrchestrator = options.recoveryOrchestrator;
+
+    const runGenerate = async (retryInput?: FlowGenerateRetryInput) => {
+      const clientConfig = retryInput?.cookieHeader
+        ? {
+            cookie: retryInput.cookieHeader,
+          }
+        : undefined;
+      const client = createFlowClient(clientConfig);
+      const project = client.project(projectId);
+      const recaptchaToken = retryInput?.recaptchaToken ?? body.recaptcha_token;
+
+      return await project.generateImageWithReferences(body.prompt, references, {
+        ...generateBaseOptions,
+        recaptchaToken,
+      });
     };
 
-    if (body.seed !== undefined) generateOptions.seed = body.seed;
-    if (body.model !== undefined) generateOptions.model = body.model;
+    if (!recoveryOrchestrator) {
+      return await runGenerate();
+    }
 
-    const result = await project.generateImageWithReferences(
-      body.prompt,
-      references,
-      generateOptions,
-    );
-
-    return result;
+    return await recoveryOrchestrator.runGenerateWithRecovery({
+      recaptchaToken: body.recaptcha_token,
+      generate: runGenerate,
+    });
   });
 
   app.patch('/flow/workflows/:workflowId', async (request, reply) => {
