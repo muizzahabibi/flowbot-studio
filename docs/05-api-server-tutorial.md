@@ -42,3 +42,13 @@ Jika `FLOW_LOCAL_API_KEY` di-set, route proteksi harus membawa:
 Authorization: Bearer <FLOW_LOCAL_API_KEY>
 ```
 
+## Bootstrap Auth untuk Server Lokal
+
+Saat server start, `createFlowClient()` akan mencoba load `.env` lalu memakai prioritas cookie berikut:
+
+1. `config.cookie`
+2. `FLOW_GOOGLE_COOKIE`
+3. `FLOW_COOKIE`
+
+Ini berguna untuk server lokal yang dijalankan dari repo tanpa perlu menyuntik cookie manual ke setiap request. Jika bearer token bootstrap sudah stale, core akan refresh ulang lewat cookie Google Flow yang aktif.
+

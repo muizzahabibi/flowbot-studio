@@ -1,5 +1,20 @@
 ﻿# Changelog
 
+## 2026-03-17
+
+### Added
+- Prefer `FLOW_GOOGLE_COOKIE` over `FLOW_COOKIE` when bootstrapping the core client.
+- Document local-server auth bootstrap, bulk generation flow, and troubleshooting updates for the new release.
+
+### Fixed
+- Refresh auth from Google Flow cookie when bootstrap bearer tokens are stale or session refresh is required.
+- Keep local-server generation working after server restarts by relying on the refreshed cookie-backed auth path.
+- Normalize PowerShell OpenAI-style `data` responses in `scripts/generate-20-kolam-renang.ps1` so single-item responses do not crash on `.Count` access.
+
+### Verified
+- Focused core/server regression tests pass for bootstrap priority, auth-session refresh, and route behavior.
+- Real local-server generation succeeded for `Count=1` and `Count=20`, with all images saved and `manifest.csv` marked `ok`.
+
 ## 2026-03-07
 
 ### Fixed

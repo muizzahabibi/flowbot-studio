@@ -8,6 +8,8 @@ interface SessionState {
   user: FlowSessionUser | undefined;
 }
 
+const BOOTSTRAP_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
+
 export class FlowAuthSession {
   private readonly cookie: string | undefined;
   private state: SessionState;
@@ -15,9 +17,16 @@ export class FlowAuthSession {
 
   constructor(config: FlowClientConfig, logger: FlowLogger = defaultLogger) {
     this.cookie = config.cookie?.trim();
+    const bootstrapToken = config.bearerToken?.trim();
+
+    let expiresAt: Date | undefined;
+    if (bootstrapToken && !this.cookie) {
+      expiresAt = new Date(Date.now() + BOOTSTRAP_TOKEN_TTL_MS);
+    }
+
     this.state = {
-      accessToken: config.bearerToken?.trim(),
-      expiresAt: config.bearerToken ? new Date(Date.now() + 2 * 60 * 60 * 1000) : undefined,
+      accessToken: bootstrapToken,
+      expiresAt,
       user: undefined,
     };
     this.logger = logger;
@@ -49,10 +58,11 @@ export class FlowAuthSession {
     }
 
     if (!this.cookie) {
-      if (this.state.accessToken) {
-        return this.state.accessToken;
-      }
-      throw new FlowAuthError('Cookie is required to refresh auth session');
+      throw new FlowAuthError('Cookie is required to refresh auth session', {
+        code: 'FLOW_AUTH_INVALID_COOKIE',
+        source: 'auth_session',
+        retryable: true,
+      });
     }
 
     await this.refreshFromLabs();
@@ -74,22 +84,30 @@ export class FlowAuthSession {
     if (!response.ok) {
       const errorBody = await response.text();
       this.logger.error('Auth session refresh failed', { status: response.status, errorBody });
-      throw new FlowAuthError(`Authentication failed (${response.status})`, errorBody);
+      throw new FlowAuthError(`Authentication failed (${response.status})`, {
+        details: errorBody,
+      });
     }
 
     const payload = (await response.json()) as FlowSessionResponse;
+    const accessToken = payload.access_token;
+    const expires = payload.expires;
 
-    if (payload.error === 'ACCESS_TOKEN_REFRESH_NEEDED') {
-      throw new FlowAuthError('Cookie expired. Please provide a new cookie.');
+    if (payload.error === 'ACCESS_TOKEN_REFRESH_NEEDED' && (!accessToken || !expires)) {
+      throw new FlowAuthError('Cookie expired. Please provide a new cookie.', {
+        code: 'FLOW_AUTH_REFRESH_NEEDED',
+        source: 'auth_session',
+        retryable: true,
+      });
     }
 
-    if (!payload.access_token || !payload.expires) {
+    if (!accessToken || !expires) {
       throw new FlowValidationError('Invalid auth session payload', payload);
     }
 
     this.state = {
-      accessToken: payload.access_token,
-      expiresAt: new Date(payload.expires),
+      accessToken,
+      expiresAt: new Date(expires),
       user: payload.user,
     };
 

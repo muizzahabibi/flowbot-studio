@@ -15,6 +15,7 @@ import type { FlowClientConfig } from './types/flow.js';
 
 export * from './types/flow.js';
 export * from './utils/errors.js';
+export type { FlowAuthErrorOptions, FlowErrorCode, FlowErrorOptions, FlowErrorSource } from './utils/errors.js';
 export type { PromptBuilderInput };
 export { Account, Project, Media, Prompt, FlowAuthSession, FlowHttpClient, FlowEndpoints, FlowTelemetry, OpenAIImageAdapter };
 
@@ -32,24 +33,22 @@ export interface FlowClient {
 }
 
 export function createFlowClient(config: FlowClientConfig = {}): FlowClient {
-  const envEnabled =
-    typeof process !== 'undefined' &&
-    (process.env.FLOW_COOKIE || process.env.FLOW_BEARER_TOKEN || process.env.FLOW_GOOGLE_API_KEY);
-
-  if (envEnabled) {
-    try {
-      loadEnv({
-        allowEmptyValues: true,
-        example: '.env.example',
-        path: '.env',
-      });
-    } catch {
-      // Environment file is optional for library consumers.
+  try {
+    loadEnv({
+      allowEmptyValues: true,
+      example: '.env.example',
+      path: '.env',
+    });
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') {
+      throw error;
     }
+
+    // Environment file is optional for library consumers.
   }
 
   const merged: FlowClientConfig = {
-    cookie: config.cookie ?? process.env.FLOW_COOKIE,
+    cookie: config.cookie ?? process.env.FLOW_GOOGLE_COOKIE ?? process.env.FLOW_COOKIE,
     bearerToken: config.bearerToken ?? process.env.FLOW_BEARER_TOKEN,
     googleApiKey: config.googleApiKey ?? process.env.FLOW_GOOGLE_API_KEY,
     apiBaseUrl: config.apiBaseUrl ?? process.env.FLOW_API_BASE_URL,

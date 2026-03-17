@@ -94,7 +94,6 @@ export class FlowEndpoints {
         },
       },
       {
-        skipAuth: true,
         headers: {
           'content-type': 'application/json',
         },

@@ -88,8 +88,9 @@ pnpm -r build
 Isi minimal `.env`:
 
 ```env
-FLOW_COOKIE=<full Cookie header value>
-FLOW_BEARER_TOKEN=<access_token dari /fx/api/auth/session>
+FLOW_GOOGLE_COOKIE=<full Google Cookie header value>
+FLOW_COOKIE=<legacy fallback cookie header value>
+FLOW_BEARER_TOKEN=<optional bootstrap token>
 FLOW_GOOGLE_API_KEY=
 FLOW_TELEMETRY_MODE=enabled
 FLOW_API_BASE_URL=https://aisandbox-pa.googleapis.com
@@ -97,6 +98,13 @@ FLOW_TRPC_BASE_URL=https://labs.google/fx/api/trpc
 FLOW_LOCAL_API_KEY=
 PORT=3000
 ```
+
+Prioritas auth bootstrap sekarang:
+- `config.cookie`
+- `FLOW_GOOGLE_COOKIE`
+- `FLOW_COOKIE`
+
+Jika cookie tersedia, server/core akan refresh token dari sesi Google Flow saat bearer token stale atau tidak dipakai lagi.
 
 ## Monorepo Commands
 

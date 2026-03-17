@@ -7,5 +7,9 @@ export interface ErrorBody {
     message: string;
     type: string;
     code?: string;
+    retryable?: boolean;
+    recoveryAttempted?: boolean;
+    manualActionRequired?: boolean;
+    recoveryInProgress?: boolean;
   };
 }
