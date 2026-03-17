@@ -1,15 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import { FlowError } from '@flowbot-studio/core';
 import { registerErrorHandler } from '../src/middleware/error-handler.js';
 
 const {
   createFlowClientMock,
+  createProjectMock,
+  fetchMediaBytesMock,
   initialGenerateMock,
   retryGenerateMock,
   runGenerateWithRecoveryMock,
 } = vi.hoisted(() => ({
   createFlowClientMock: vi.fn(),
+  createProjectMock: vi.fn(),
+  fetchMediaBytesMock: vi.fn(),
   initialGenerateMock: vi.fn(),
   retryGenerateMock: vi.fn(),
   runGenerateWithRecoveryMock: vi.fn(),
@@ -22,6 +26,50 @@ vi.mock('@flowbot-studio/core', async (importOriginal) => {
     createFlowClient: createFlowClientMock,
   };
 });
+
+function createFlowClientValue(overrides: {
+  generateImageWithReferences?: typeof initialGenerateMock;
+  renameWorkflow?: ReturnType<typeof vi.fn>;
+} = {}): {
+  project: () => {
+    generateImageWithReferences: typeof initialGenerateMock;
+  };
+  createProject: typeof createProjectMock;
+  media: {
+    renameWorkflow: ReturnType<typeof vi.fn>;
+    save: typeof fetchMediaBytesMock;
+  };
+} {
+  return {
+    project: () => ({
+      generateImageWithReferences: overrides.generateImageWithReferences ?? initialGenerateMock,
+    }),
+    createProject: createProjectMock,
+    media: {
+      renameWorkflow: overrides.renameWorkflow ?? vi.fn(),
+      save: fetchMediaBytesMock,
+    },
+  };
+}
+
+async function createApp(
+  options: Parameters<(typeof import('../src/routes/flow.js'))['registerFlowRoutes']>[1],
+): Promise<FastifyInstance> {
+  const { registerFlowRoutes } = await import('../src/routes/flow.js');
+  const app = Fastify();
+  await registerFlowRoutes(app, options);
+  return app;
+}
+
+function createGeneratePayload(): {
+  prompt: string;
+  recaptcha_token: string;
+} {
+  return {
+    prompt: 'make art',
+    recaptcha_token: 'caller-token',
+  };
+}
 
 describe('registerFlowRoutes', () => {
   afterEach(() => {
@@ -42,18 +90,13 @@ describe('registerFlowRoutes', () => {
       generatedImages: [],
     });
 
-    createFlowClientMock.mockImplementation((config?: { cookie?: string }) => ({
-      project: () => ({
+    createFlowClientMock.mockImplementation((config?: { cookie?: string }) =>
+      createFlowClientValue({
         generateImageWithReferences: config?.cookie ? retryGenerateMock : initialGenerateMock,
       }),
-      media: {
-        renameWorkflow: vi.fn(),
-      },
-    }));
+    );
 
-    const { registerFlowRoutes } = await import('../src/routes/flow.js');
-    const app = Fastify();
-    await registerFlowRoutes(app, {
+    const app = await createApp({
       recoveryOrchestrator: {
         runGenerateWithRecovery: runGenerateWithRecoveryMock,
       },
@@ -62,10 +105,7 @@ describe('registerFlowRoutes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/flow/projects/project-123/generate',
-      payload: {
-        prompt: 'make art',
-        recaptcha_token: 'caller-token',
-      },
+      payload: createGeneratePayload(),
     });
 
     expect(response.statusCode).toBe(200);
@@ -84,18 +124,9 @@ describe('registerFlowRoutes', () => {
       generatedImages: [],
     });
 
-    createFlowClientMock.mockImplementation(() => ({
-      project: () => ({
-        generateImageWithReferences: initialGenerateMock,
-      }),
-      media: {
-        renameWorkflow: vi.fn(),
-      },
-    }));
+    createFlowClientMock.mockReturnValue(createFlowClientValue());
 
-    const { registerFlowRoutes } = await import('../src/routes/flow.js');
-    const app = Fastify();
-    await registerFlowRoutes(app, {
+    const app = await createApp({
       recoveryOrchestrator: {
         runGenerateWithRecovery: runGenerateWithRecoveryMock,
       },
@@ -104,10 +135,7 @@ describe('registerFlowRoutes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/flow/projects/project-123/generate',
-      payload: {
-        prompt: 'make art',
-        recaptcha_token: 'caller-token',
-      },
+      payload: createGeneratePayload(),
     });
 
     expect(response.statusCode).toBe(200);
@@ -132,9 +160,9 @@ describe('registerFlowRoutes', () => {
       }),
     );
 
-    const { registerFlowRoutes } = await import('../src/routes/flow.js');
     const app = Fastify();
     registerErrorHandler(app);
+    const { registerFlowRoutes } = await import('../src/routes/flow.js');
     await registerFlowRoutes(app, {
       recoveryOrchestrator: {
         runGenerateWithRecovery: runGenerateWithRecoveryMock,
@@ -144,10 +172,7 @@ describe('registerFlowRoutes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/flow/projects/project-123/generate',
-      payload: {
-        prompt: 'make art',
-        recaptcha_token: 'caller-token',
-      },
+      payload: createGeneratePayload(),
     });
 
     expect(response.statusCode).toBe(503);
@@ -179,9 +204,9 @@ describe('registerFlowRoutes', () => {
       }),
     );
 
-    const { registerFlowRoutes } = await import('../src/routes/flow.js');
     const app = Fastify();
     registerErrorHandler(app);
+    const { registerFlowRoutes } = await import('../src/routes/flow.js');
     await registerFlowRoutes(app, {
       recoveryOrchestrator: {
         runGenerateWithRecovery: runGenerateWithRecoveryMock,
@@ -191,10 +216,7 @@ describe('registerFlowRoutes', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/flow/projects/project-123/generate',
-      payload: {
-        prompt: 'make art',
-        recaptcha_token: 'caller-token',
-      },
+      payload: createGeneratePayload(),
     });
 
     expect(response.statusCode).toBe(503);
@@ -209,6 +231,47 @@ describe('registerFlowRoutes', () => {
         recoveryInProgress: false,
       },
     });
+
+    await app.close();
+  });
+
+  it('creates a project through the server route and returns the project id', async () => {
+    createProjectMock.mockResolvedValueOnce({ projectId: 'project-created-123' });
+
+    createFlowClientMock.mockReturnValue(createFlowClientValue());
+
+    const app = await createApp({});
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/flow/projects',
+      payload: {
+        displayName: 'pool-auto-20260317-120000',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(createProjectMock).toHaveBeenCalledWith('pool-auto-20260317-120000');
+    expect(response.json()).toEqual({ projectId: 'project-created-123' });
+
+    await app.close();
+  });
+
+  it('downloads media bytes through the server route', async () => {
+    fetchMediaBytesMock.mockResolvedValueOnce(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    createFlowClientMock.mockReturnValue(createFlowClientValue());
+
+    const app = await createApp({});
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/flow/media/media-123/content',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchMediaBytesMock).toHaveBeenCalledWith('media-123');
+    expect(response.body).toBe(Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('utf8'));
 
     await app.close();
   });

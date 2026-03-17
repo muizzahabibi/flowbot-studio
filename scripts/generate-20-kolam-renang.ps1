@@ -2,6 +2,8 @@
 param(
   [string]$ProjectId = $env:PROJECT_ID,
   [string]$FlowCookie = $env:FLOW_COOKIE,
+  [string]$FlowServerBaseUrl = $(if ($env:FLOW_SERVER_BASE_URL) { $env:FLOW_SERVER_BASE_URL } else { "http://127.0.0.1:3000" }),
+  [string]$FlowLocalApiKey = $env:FLOW_LOCAL_API_KEY,
   [string]$Model = "nano-banana",
   [int]$Count = 20,
   [int]$MinDelaySeconds = 5,
@@ -26,7 +28,7 @@ if ($FetchRetries -lt 1) { throw "FetchRetries minimal 1." }
 if ($FetchRetryDelaySeconds -lt 1) { throw "FetchRetryDelaySeconds minimal 1." }
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $repoRoot
-$pnpmCmd = "pnpm.cmd"
+$FlowServerBaseUrl = $FlowServerBaseUrl.TrimEnd('/')
 
 function Get-EnvFileValue {
   param(
@@ -46,108 +48,208 @@ function Get-EnvFileValue {
   return $null
 }
 
-if (-not $FlowCookie) {
-  $FlowCookie = Get-EnvFileValue -FilePath ".env" -Name "FLOW_COOKIE"
-}
-if (-not $FlowCookie) {
-  throw @"
-FLOW_COOKIE belum diisi.
-Set di environment atau tambahkan ke .env:
-FLOW_COOKIE=<cookie dari browser labs.google>
-"@
+if (-not $FlowLocalApiKey) {
+  $FlowLocalApiKey = Get-EnvFileValue -FilePath ".env" -Name "FLOW_LOCAL_API_KEY"
 }
 
-$coreDist = "packages/core/dist/index.js"
-$cliEntry = "packages/cli/dist/index.js"
+function Get-FlowServerHeaders {
+  $headers = @{}
+  if ($FlowLocalApiKey) {
+    $headers["Authorization"] = "Bearer $FlowLocalApiKey"
+  }
+  return $headers
+}
 
-function Get-LatestWriteTimeUtc {
+function Get-FlowServerUri {
   param(
     [Parameter(Mandatory = $true)]
-    [string]$PathPattern
+    [string]$Path
   )
 
-  $items = Get-ChildItem -Path $PathPattern -Recurse -File -ErrorAction SilentlyContinue
-  if (-not $items -or $items.Count -eq 0) { return [datetime]::MinValue }
-  return ($items | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).LastWriteTimeUtc
+  if ($Path.StartsWith("/")) {
+    return "$FlowServerBaseUrl$Path"
+  }
+
+  return "$FlowServerBaseUrl/$Path"
 }
 
-$needsBuild = (-not (Test-Path $coreDist)) -or (-not (Test-Path $cliEntry))
-if (-not $needsBuild) {
-  $latestSourceUtc = @(
-    Get-LatestWriteTimeUtc -PathPattern "packages/core/src/*.ts"
-    Get-LatestWriteTimeUtc -PathPattern "packages/cli/src/*.ts"
-  ) | Sort-Object -Descending | Select-Object -First 1
+function Get-StructuredErrorMessage {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$ErrorPayload
+  )
 
-  $latestDistUtc = @(
-    (Get-Item $coreDist).LastWriteTimeUtc
-    (Get-Item $cliEntry).LastWriteTimeUtc
-  ) | Sort-Object -Descending | Select-Object -First 1
+  $errorBody = Get-PropValue -InputObject $ErrorPayload -Name "error"
+  if ($null -eq $errorBody) {
+    return $null
+  }
 
-  if ($latestSourceUtc -gt $latestDistUtc) {
-    $needsBuild = $true
+  $parts = @()
+  $message = Get-PropValue -InputObject $errorBody -Name "message"
+  $code = Get-PropValue -InputObject $errorBody -Name "code"
+  $retryable = Get-PropValue -InputObject $errorBody -Name "retryable"
+  $recoveryAttempted = Get-PropValue -InputObject $errorBody -Name "recoveryAttempted"
+  $manualActionRequired = Get-PropValue -InputObject $errorBody -Name "manualActionRequired"
+
+  if ($message) { $parts += [string]$message }
+  if ($code) { $parts += "code=$code" }
+  if ($null -ne $retryable) { $parts += "retryable=$retryable" }
+  if ($null -ne $recoveryAttempted) { $parts += "recoveryAttempted=$recoveryAttempted" }
+  if ($null -ne $manualActionRequired) { $parts += "manualActionRequired=$manualActionRequired" }
+
+  if ($parts.Count -eq 0) {
+    return $null
+  }
+
+  return ($parts -join " | ")
+}
+
+function Read-ErrorResponseBody {
+  param(
+    [Parameter(Mandatory = $true)]
+    [object]$Response
+  )
+
+  $stream = $Response.GetResponseStream()
+  $reader = New-Object System.IO.StreamReader($stream)
+
+  try {
+    return $reader.ReadToEnd()
+  } finally {
+    $reader.Dispose()
+    $stream.Dispose()
   }
 }
 
-if ($needsBuild) {
-  Write-Host "[INIT] Build core+cli karena dist belum ada / sudah kedaluwarsa..."
-  & $pnpmCmd --filter @flowbot-studio/core --filter @flowbot-studio/cli build
-  if ($LASTEXITCODE -ne 0) { throw "Build gagal. Periksa error di atas." }
-}
-
-function Invoke-FlowCli {
+function New-FlowServerErrorMessage {
   param(
     [Parameter(Mandatory = $true)]
-    [string[]]$Args
-  )
-
-  # Force refresh auth token from FLOW_COOKIE and avoid stale FLOW_BEARER_TOKEN from .env.
-  $allArgs = @("exec", "node", $cliEntry) + $Args + @("--cookie", $FlowCookie, "--bearer-token=")
-  $escapedArgs = $allArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }
-
-  $psi = New-Object System.Diagnostics.ProcessStartInfo
-  $psi.FileName = $pnpmCmd
-  $psi.Arguments = ($escapedArgs -join " ")
-  $psi.WorkingDirectory = (Get-Location).Path
-  $psi.UseShellExecute = $false
-  $psi.RedirectStandardOutput = $true
-  $psi.RedirectStandardError = $true
-  $psi.CreateNoWindow = $true
-
-  $proc = New-Object System.Diagnostics.Process
-  $proc.StartInfo = $psi
-  $null = $proc.Start()
-  $stdout = $proc.StandardOutput.ReadToEnd()
-  $stderr = $proc.StandardError.ReadToEnd()
-  $proc.WaitForExit()
-
-  $raw = @($stdout, $stderr) -join [Environment]::NewLine
-  if ($proc.ExitCode -ne 0) {
-    throw "Command gagal: flow $($Args -join ' ')`n$raw"
-  }
-  return $raw.Trim()
-}
-
-function ConvertFrom-CliJson {
-  param(
+    [int]$StatusCode,
     [Parameter(Mandatory = $true)]
-    [string]$Raw
+    [string]$Method,
+    [Parameter(Mandatory = $true)]
+    [string]$Uri,
+    [string]$RawBody
   )
 
-  $lines = $Raw -split "`r?`n"
-  $start = -1
-  for ($i = 0; $i -lt $lines.Length; $i++) {
-    if ($lines[$i].TrimStart().StartsWith("{")) {
-      $start = $i
-      break
+  if ($RawBody) {
+    try {
+      $payload = $RawBody | ConvertFrom-Json
+      $structuredMessage = Get-StructuredErrorMessage -ErrorPayload $payload
+      if ($structuredMessage) {
+        return "Server error $StatusCode untuk $Method ${Uri}: $structuredMessage"
+      }
+    } catch {
     }
+
+    return "Server error $StatusCode untuk $Method ${Uri}: $RawBody"
   }
 
-  if ($start -lt 0) {
-    throw "JSON output tidak ditemukan.`n$Raw"
+  return "Server error $StatusCode untuk $Method $Uri"
+}
+
+function Invoke-FlowServerJson {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Method,
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [object]$Body
+  )
+
+  $uri = Get-FlowServerUri -Path $Path
+  $headers = Get-FlowServerHeaders
+
+  try {
+    if ($PSBoundParameters.ContainsKey("Body") -and $null -ne $Body) {
+      $jsonBody = $Body | ConvertTo-Json -Depth 10
+      return Invoke-RestMethod -Uri $uri -Method $Method -Headers $headers -ContentType "application/json" -Body $jsonBody
+    }
+
+    return Invoke-RestMethod -Uri $uri -Method $Method -Headers $headers
+  } catch {
+    $response = $_.Exception.Response
+    if ($null -eq $response) {
+      throw "Request ke local server gagal ($Method $uri): $($_.Exception.Message)"
+    }
+
+    $statusCode = [int]$response.StatusCode
+    $rawBody = Read-ErrorResponseBody -Response $response
+    throw (New-FlowServerErrorMessage -StatusCode $statusCode -Method $Method -Uri $uri -RawBody $rawBody)
+  }
+}
+
+function Invoke-FlowServerDownload {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$Path,
+    [Parameter(Mandatory = $true)]
+    [string]$OutFile
+  )
+
+  $uri = Get-FlowServerUri -Path $Path
+  $headers = Get-FlowServerHeaders
+
+  try {
+    Invoke-WebRequest -Uri $uri -Headers $headers -OutFile $OutFile | Out-Null
+  } catch {
+    $response = $_.Exception.Response
+    if ($null -eq $response) {
+      throw "Download dari local server gagal ($uri): $($_.Exception.Message)"
+    }
+
+    $statusCode = [int]$response.StatusCode
+    $rawBody = Read-ErrorResponseBody -Response $response
+    throw (New-FlowServerErrorMessage -StatusCode $statusCode -Method "GET" -Uri $uri -RawBody $rawBody)
+  }
+}
+
+function Test-FlowServerHealth {
+  try {
+    $health = Invoke-FlowServerJson -Method "GET" -Path "/health"
+    return ($null -ne $health -and (Get-PropValue -InputObject $health -Name "status") -eq "ok")
+  } catch {
+    throw @"
+Local server tidak bisa dijangkau di $FlowServerBaseUrl.
+Jalankan server lokal dulu lalu ulangi script ini.
+Detail: $($_.Exception.Message)
+"@
+  }
+}
+
+$RecaptchaSiteKey = "6LdsFiUsAAAAAIjVDZcuLhaHiDn5nnHVXVRQGeMV"
+$RecaptchaCo = "aHR0cHM6Ly9sYWJzLmdvb2dsZTo0NDM."
+$RecaptchaVersion = "QvLuXwupqtKMva7GIh5eGl3U"
+
+function Get-RecaptchaToken {
+  $cb = [System.Guid]::NewGuid().ToString("N")
+  $anchorUri = "https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=$RecaptchaSiteKey&co=$([uri]::EscapeDataString($RecaptchaCo))&hl=en&v=$RecaptchaVersion&size=invisible&cb=$cb"
+  $headers = @{
+    "accept" = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+    "accept-language" = "en-US,en;q=0.9,id-ID;q=0.8,id;q=0.7"
+    "user-agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
   }
 
-  $jsonText = ($lines[$start..($lines.Length - 1)] -join "`n").Trim()
-  return ($jsonText | ConvertFrom-Json)
+  $anchorResponse = Invoke-WebRequest -Uri $anchorUri -Headers $headers -Method GET -TimeoutSec 30
+  $anchorTokenMatch = [regex]::Match($anchorResponse.Content, 'id="recaptcha-token"[^>]*value="([^"]+)"')
+  if (-not $anchorTokenMatch.Success) {
+    throw "Gagal mendapatkan reCAPTCHA anchor token."
+  }
+
+  $reloadBody = "v=$([uri]::EscapeDataString($RecaptchaVersion))&reason=q&k=$([uri]::EscapeDataString($RecaptchaSiteKey))&c=$([uri]::EscapeDataString($anchorTokenMatch.Groups[1].Value))&sa=IMAGE_GENERATION&co=$([uri]::EscapeDataString($RecaptchaCo))"
+  $reloadHeaders = @{
+    "content-type" = "application/x-www-form-urlencoded"
+    "user-agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+    "referer" = "https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=$RecaptchaSiteKey&co=$RecaptchaCo&hl=en&v=$RecaptchaVersion&size=invisible&anchor-ms=20000&execute-ms=30000&cb=l7qwgzhkq6fu"
+  }
+
+  $reloadResponse = Invoke-WebRequest -Uri "https://www.google.com/recaptcha/enterprise/reload?k=$RecaptchaSiteKey" -Method POST -Headers $reloadHeaders -Body $reloadBody -TimeoutSec 30
+  $tokenMatch = [regex]::Match($reloadResponse.Content, '"rresp","([^"]+)"')
+  if (-not $tokenMatch.Success) {
+    throw "Gagal mendapatkan reCAPTCHA token."
+  }
+
+  return $tokenMatch.Groups[1].Value
 }
 
 function Get-PropValue {
@@ -177,25 +279,20 @@ function Test-FlowSession {
   }
 }
 
-if (-not (Test-FlowSession -Cookie $FlowCookie)) {
-  throw @"
-FLOW_COOKIE tidak valid/expired (session endpoint tidak bisa diakses dengan cookie ini).
-Cara refresh:
-1) Login ulang ke https://labs.google/fx/tools/flow di browser.
-2) Buka DevTools -> Network, lakukan aksi create project.
-3) Ambil header request 'cookie' dari request ke labs.google/fx/api/trpc/project.createProject (atau /fx/api/auth/session).
-4) Update FLOW_COOKIE di .env, lalu jalankan ulang script.
-
-Catatan: file HAR ini tersanitasi (tidak menyimpan cookie), jadi cookie tidak bisa dipulihkan dari labs.google.har.
-"@
+if (-not (Test-FlowServerHealth)) {
+  throw "Health check local server gagal di $FlowServerBaseUrl"
 }
 
+Write-Host "[INIT] Local server sehat: $FlowServerBaseUrl"
+Write-Host "[INIT] Script ini memakai local server; recovery/cookie dikelola server env (mis. FLOW_GOOGLE_COOKIE)."
+
 if (-not $ProjectId) {
-  Write-Host "[INIT] PROJECT_ID tidak ada, membuat project baru..."
-  $projectRaw = Invoke-FlowCli -Args @("project", "create", "--name", ("pool-auto-" + (Get-Date -Format "yyyyMMdd-HHmmss")))
-  $projectJson = ConvertFrom-CliJson -Raw $projectRaw
-  $ProjectId = $projectJson.projectId
-  if (-not $ProjectId) { throw "Gagal mendapatkan projectId dari output project create." }
+  Write-Host "[INIT] PROJECT_ID tidak ada, membuat project baru via local server..."
+  $projectJson = Invoke-FlowServerJson -Method "POST" -Path "/flow/projects" -Body @{
+    displayName = "pool-auto-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+  }
+  $ProjectId = Get-PropValue -InputObject $projectJson -Name "projectId"
+  if (-not $ProjectId) { throw "Gagal mendapatkan projectId dari response server." }
   Write-Host "[INIT] Project dibuat: $ProjectId"
 }
 
@@ -237,20 +334,25 @@ for ($i = 1; $i -le $Count; $i++) {
 
   try {
     Write-Host "[GEN $i/$Count] $prompt"
-    $generateRaw = Invoke-FlowCli -Args @(
-      "generate",
-      "--project-id", $ProjectId,
-      "--prompt", $prompt,
-      "--model", $Model
-    )
-    $generateJson = ConvertFrom-CliJson -Raw $generateRaw
-    if (-not $generateJson.data -or $generateJson.data.Count -lt 1) {
+    Write-Host "[GEN $i/$Count] Membuat token reCAPTCHA..."
+    $recaptchaToken = Get-RecaptchaToken
+
+    $generateJson = Invoke-FlowServerJson -Method "POST" -Path "/v1/images/generations" -Body @{
+      model = $Model
+      prompt = $prompt
+      project_id = $ProjectId
+      recaptcha_token = $recaptchaToken
+      response_format = "b64_json"
+    }
+
+    $data = @(Get-PropValue -InputObject $generateJson -Name "data")
+    if ($data.Count -lt 1) {
       $status = "no_data"
       Write-Warning "[WARN $i/$Count] Response generate tidak punya data gambar."
       throw "Generate response kosong"
     }
 
-    $first = $generateJson.data[0]
+    $first = $data[0]
     $b64 = Get-PropValue -InputObject $first -Name "b64_json"
     $url = Get-PropValue -InputObject $first -Name "url"
     $mediaIdRaw = Get-PropValue -InputObject $first -Name "media_id"
@@ -259,7 +361,7 @@ for ($i = 1; $i -le $Count; $i++) {
       $bytes = [Convert]::FromBase64String([string]$b64)
       [IO.File]::WriteAllBytes($file, $bytes)
       Write-Host "[SAVE $i/$Count] Base64 disimpan ke $file"
-    } elseif ($url) {
+    } elseif ($url -and ([string]$url).StartsWith("http", [System.StringComparison]::OrdinalIgnoreCase)) {
       Invoke-WebRequest -Uri ([string]$url) -OutFile $file
       Write-Host "[SAVE $i/$Count] URL disimpan ke $file"
     } elseif ($mediaIdRaw) {
@@ -270,7 +372,7 @@ for ($i = 1; $i -le $Count; $i++) {
       for ($attempt = 1; $attempt -le $FetchRetries; $attempt++) {
         try {
           Write-Host "[FETCH $i/$Count][$attempt/$FetchRetries] media_id=$mediaId -> $file"
-          $null = Invoke-FlowCli -Args @("fetch", "--media-id", $mediaId, "--output", $file)
+          Invoke-FlowServerDownload -Path "/flow/media/$mediaId/content" -OutFile $file
           if (Test-Path $file) {
             $fetchOk = $true
             break

@@ -9,10 +9,23 @@ Menjalankan generate banyak gambar secara otomatis, dengan kontrol delay agar ti
 Gunakan script:
 - `scripts/generate-20-kolam-renang.ps1`
 
+Script ini sekarang full lewat local server:
+- health check ke `GET /health`
+- create project via `POST /flow/projects` bila `-ProjectId` tidak diisi
+- generate via `POST /v1/images/generations`
+- simpan hasil dari `b64_json` atau `url`
+- tulis `manifest.csv` untuk semua iterasi
+
 Contoh:
 
 ```powershell
 powershell -NoExit -ExecutionPolicy Bypass -File .\scripts\generate-20-kolam-renang.ps1 -Count 20 -MinDelaySeconds 5 -MaxDelaySeconds 30 -KeepWindowOpen
+```
+
+Untuk run cepat tanpa jeda:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\generate-20-kolam-renang.ps1 -Count 20 -MinDelaySeconds 0 -MaxDelaySeconds 0
 ```
 
 ## Opsi 2: Prompt File Kustom
